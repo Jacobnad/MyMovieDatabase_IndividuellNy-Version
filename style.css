@@ -99,6 +99,7 @@ body {
 
 
 .mainContaier {
+    margin-top: 3rem;
     backdrop-filter: blur(10px);
     display: flex;
     flex-direction: column;
