@@ -2,11 +2,21 @@
 
 // Importera moduler
 import apiHandler from "./fetchData.js";
+import pagination from "./pagination.js";
+
+// Inställningar för filmer
+const movieSettings = {
+    currentPage: 1,
+    moviesPerPage: 4,
+    shuffledMovies: [],
+};
+
 
 // Lyssna på när DOM är laddad
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM loaded');
     await initiateMovieTrailersFetching();
+    await fetchTopMovies();
    
    
 });
@@ -149,3 +159,266 @@ const toggleCarouselDisplay = function(currentIndex, carousel) {
         console.error('Carousel is null');
     }
 };
+
+
+// Hämta toppfilmer och behandla dem
+function fetchTopMovies() {
+    const handleMoviesAfterFetch = movies => {
+        console.log('Movies:', movies);
+        movieSettings.shuffledMovies = shuffleArray(movies);
+        console.log('Shuffled movies array:', movieSettings.shuffledMovies);
+        handleMovies();
+    };
+
+    if (!movieSettings.shuffledMovies.length) {
+        apiHandler.fetchData('https://santosnr6.github.io/Data/movies.json')
+            .then(handleMoviesAfterFetch)
+            .catch(error => {
+                console.error(error);
+                throw error;
+            });
+    } else {
+        handleMovies();
+    }
+}
+
+
+// Hantera filmer
+function handleMovies() {
+    const currentMovies = pagination.paginate(movieSettings.shuffledMovies, movieSettings.currentPage, movieSettings.moviesPerPage);
+
+    const moviesContainer = document.querySelector('.sectionTop20Container');
+    if (moviesContainer) {
+        renderMovies(currentMovies, moviesContainer);
+    }
+}
+
+
+
+// Rendera filmer
+function renderMovies(movies = [], shuffle = false) {
+    const moviesContainer = document.querySelector('.sectionTop20Container');
+
+    if (moviesContainer) {
+        moviesContainer.innerHTML = '';
+
+        const movieCardsContainer = createMovieCardsContainer(movies, shuffle);
+        moviesContainer.appendChild(movieCardsContainer);
+
+        renderPagination(movies);
+    }
+}
+
+
+// Skapa behållare för filmkort
+function createMovieCardsContainer(movies, shuffle) {
+    const movieCardsContainer = document.createElement('section');
+    movieCardsContainer.className = 'imageTop20Container';
+
+    const moviesToRender = shuffle ? shuffleArray(movies) : movies;
+
+    moviesToRender.forEach(movie => {
+        movieCardsContainer.appendChild(createMovieCard(movie));
+    });
+
+    return movieCardsContainer;
+}
+
+
+// Skapa ett filmkort
+function createMovieCard(movie) {
+    const normalizedMovie = normalizeMovieData(movie);
+    const movieCard = document.createElement('section');
+    movieCard.className = 'top20Img';
+
+    const posterImage = document.createElement('img');
+    posterImage.src = normalizedMovie.poster === 'N/A' ? 'res/logo.png' : normalizedMovie.poster;
+    posterImage.alt = `${normalizedMovie.title} movie poster`;
+    posterImage.className = 'top20title';
+
+    const movieTitle = document.createElement('h2');
+    movieTitle.className = 'movie-title';
+    movieTitle.textContent = normalizedMovie.title;
+
+    movieCard.append(posterImage, movieTitle);
+
+    movieCard.addEventListener('click', async () => {
+        const imdbIdProperty = movie.hasOwnProperty('imdbID') ? 'imdbID' : 'imdbid';
+        const movieDetails = await apiHandler.fetchData(`http://www.omdbapi.com/?apikey=391ecd34&i=${movie[imdbIdProperty]}&plot=full`);
+        populateModal(top20InfoContainer, movieDetails);
+        top20InfoContainer.style.display = 'block';
+    });
+
+    return movieCard;
+}
+
+
+// Skapa top20InfoContainer och stängknapp
+const top20InfoContainer = createModal();
+const closeButton = top20InfoContainer.querySelector('.style-botton');
+
+closeButton.addEventListener('click', () => top20InfoContainer.style.display = 'none');
+
+
+// Rendera paginering
+function renderPagination() {
+    const paginationContainer = document.createElement('div');
+    paginationContainer.className = 'top20pagiation';
+
+    const prevArrow = createArrow('fa-chevron-left');
+    const nextArrow = createArrow('fa-chevron-right');
+    const nextPageText = document.createElement('span');
+    nextPageText.id = 'page-text';
+
+    [prevArrow, nextArrow].forEach(arrow => {
+        arrow.classList.add('arrow-hover');
+        arrow.addEventListener('click', arrow === prevArrow ? handlePrevArrowClick : handleNextArrowClick);
+    });
+
+    const totalPages = Math.ceil(movieSettings.shuffledMovies.length / movieSettings.moviesPerPage);
+    nextPageText.textContent = `Page ${movieSettings.currentPage} of ${totalPages}`;
+
+    paginationContainer.append(prevArrow, nextPageText, nextArrow);
+
+    const moviesContainer = document.querySelector('.sectionTop20Container');
+    if (!moviesContainer) {
+        console.error('Movies container not found');
+        return;
+    }
+
+    const movieCardsContainer = document.querySelector('.found-movie-cards-container');
+    if (movieCardsContainer) {
+        moviesContainer.appendChild(movieCardsContainer);
+    }
+
+    moviesContainer.appendChild(paginationContainer);
+}
+
+
+
+// Skapa en pil
+function createArrow(iconClass,) {
+    const arrow = document.createElement('i');
+    arrow.className = `fas ${iconClass} top20Arrow`;
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.style.cursor = 'pointer';
+    return arrow;
+}
+
+
+// Hantera klick på pil till vänster
+function handlePrevArrowClick() {
+    movieSettings.currentPage = Math.max(1, movieSettings.currentPage - 1);
+    fetchTopMovies();
+}
+
+
+// Hantera klick på pil till höger
+function handleNextArrowClick() {
+    const totalPages = Math.ceil(movieSettings.shuffledMovies.length / movieSettings.moviesPerPage);
+    
+    if (movieSettings.currentPage < totalPages) {
+        movieSettings.currentPage += 1;
+    } else {
+        movieSettings.currentPage = totalPages;
+    }
+
+    fetchTopMovies();
+}
+
+
+// Blanda en array
+function shuffleArray(array) {
+    const shuffledIndices = Array.from({ length: array.length }, (_, index) => index);
+    
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+    }
+
+    return shuffledIndices.map(index => array[index]);
+}
+
+
+function createModal() {
+    const top20InfoContainer = document.createElement('div');
+    top20InfoContainer.classList.add('top20InfoContainer');
+    top20InfoContainer.style.display = 'none';
+
+    const modalContent = document.createElement('div');
+    modalContent.classList.add('top20InfoContainer-content');
+
+    const closeButton = createCloseButton();
+
+    const movieDetails = document.createElement('div');
+    movieDetails.classList.add('movie-details');
+
+    modalContent.append(closeButton, movieDetails);
+
+    top20InfoContainer.appendChild(modalContent);
+    document.body.appendChild(top20InfoContainer);
+
+    return top20InfoContainer;
+}
+
+function createCloseButton() {
+    return createElement('span', 'style-botton', '&times;');
+}
+
+function createElement(tag, className, innerHTML) {
+    const element = document.createElement(tag);
+    element.classList.add(className);
+    element.innerHTML = innerHTML;
+    return element;
+}
+
+
+// Fyll top20InfoContainer med filminformation
+function populateModal(top20InfoContainer, movie) {
+    const movieDetails = top20InfoContainer.querySelector('.movie-details');
+    const modalContent = top20InfoContainer.querySelector('.top20InfoContainer-content');
+
+    movieDetails.style.display = 'flex';
+    movieDetails.style.flexDirection = 'column';
+    movieDetails.style.alignItems = 'center';
+
+    const posterContainer = document.createElement('div');
+    posterContainer.classList.add('top20title');
+    const posterImage = document.createElement('img');
+    posterImage.src = movie.Poster === 'N/A' ? 'res/logo.png' : movie.Poster;
+    posterImage.alt = `${movie.Title} movie poster`;
+    posterContainer.appendChild(posterImage);
+
+    const movieInfo = document.createElement('section');
+    movieInfo.classList.add('rop20Information');
+    const titleElement = document.createElement('h2');
+    titleElement.textContent = movie.Title;
+
+    const details = ['Year', 'Runtime', 'Genre', 'Director', 'Actors', 'Country', 'Awards', 'imdbRating', 'BoxOffice'];
+
+    details.forEach(detail => {
+        const detailElement = document.createElement('p');
+        detailElement.textContent = `${detail}: ${movie[detail] || 'N/A'}`;
+        movieInfo.appendChild(detailElement);
+    });
+
+    const plotElement = document.createElement('p');
+    plotElement.textContent = movie.Plot;
+
+    movieDetails.innerHTML = '';
+    movieDetails.appendChild(posterContainer);
+    movieDetails.appendChild(movieInfo);
+    movieDetails.appendChild(plotElement);
+
+    modalContent.style.background = '#000000';
+}
+
+
+
+// Normalisera filminformation
+function normalizeMovieData(movie) {
+    return Object.fromEntries(
+        Object.entries(movie)
+            .map(([key, value]) => [key.toLowerCase(), value])
+    );
+}
