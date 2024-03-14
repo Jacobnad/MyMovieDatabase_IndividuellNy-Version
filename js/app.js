@@ -15,10 +15,20 @@ const movieSettings = {
 // Lyssna på när DOM är laddad
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM loaded');
-    await initiateMovieTrailersFetching();
-    await fetchTopMovies();
+    try {
+
+        await initiateMovieTrailersFetching();
+        await fetchTopMovies();
    
-   
+    } catch (error) {
+        console.error(error);
+    }
+
+    document.querySelector('.navSearch').addEventListener('submit', searchMovies);
+    
+
+
+
 });
 
 // Hämta filmtrailers när sidan laddas
@@ -421,4 +431,119 @@ function normalizeMovieData(movie) {
         Object.entries(movie)
             .map(([key, value]) => [key.toLowerCase(), value])
     );
+}
+
+ 
+// Funktion för att söka filmer
+async function searchMovies(event) {
+    // Förhindra standardbeteendet för formulär
+    event.preventDefault();
+
+    // Hämta referens till felmeddelandekontainer
+    const errorRef = document.querySelector('.errorMsg');
+    errorRef.style.display = 'none'; // Dölj felmeddelandet från tidigare sökning
+    errorRef.innerHTML = ''; // Rensa tidigare felmeddelanden
+
+    // Hämta sökterm från inputfältet
+    const query = document.querySelector('.searchInput').value;
+    console.log(`Searching for: ${query}`);
+
+    try {
+        // Hämta data från API 
+        const response = await apiHandler.fetchData(`http://www.omdbapi.com/?apikey=db27598d&s=${query}`);
+        console.log("API Response:", response);
+
+        // Hämta sidans namn från URL:en
+        const page = window.location.pathname.split('/').pop();
+
+        // Kontrollera om API-anropet var framgångsrikt
+        if (response.Response === "True") {
+            // Om sidan är index.html, rensa innehåll och visa sökresultat
+            if (page === 'index.html') {
+                clearMainContent();
+                displaySearchResults(response.Search);
+                foundMovies = response.Search; // Spara sökresultaten för framtida användning
+                renderMovies(foundMovies); // Rendera sökresultaten i gränssnittet
+                currentPage = 1;
+            } else {
+                // Visa felmeddelande om sidan inte är index.html
+                displayErrorMessage(response.Error);
+            }
+        } else {
+            // Visa felmeddelande om API-svarar med fel
+            displayErrorMessage(response.Error);
+        }
+    } catch (error) {
+       
+    }
+}
+
+// Funktion för att visa sökresultat
+function displaySearchResults(movies) {
+    const parentContainer = document.getElementById('SerchMovieContainer');
+    parentContainer.innerHTML = ''; // Rensa tidigare sökresultat från containern
+
+    // Loopa genom varje film i sökresultaten och skapa ett kort för varje film
+    movies.forEach((movie) => {
+        const movieCard = createMovieCards(movie);
+        parentContainer.appendChild(movieCard); // Lägg till filmkortet i föräldercontainern
+    });
+}
+
+// Funktion för att skapa ett filmkort
+function createMovieCards(movie) {
+    const normalizedMovie = normalizeMovieData(movie);
+    const movieCard = document.createElement('section');
+    movieCard.className = 'searchImg';
+
+    // Skapa en bild för filmens poster
+    const posterImage = document.createElement('img');
+    posterImage.src = normalizedMovie.poster === 'N/A' ? 'res/logo.png' : normalizedMovie.poster;
+    posterImage.alt = `${normalizedMovie.title} movie poster`;
+    posterImage.className = 'top20title';
+
+    // Skapa en rubrik för filmens titel
+    const movieTitle = document.createElement('h2');
+    movieTitle.className = 'movie-title';
+    movieTitle.textContent = normalizedMovie.title;
+
+    // Lägg till bild och rubrik till filmkortet
+    movieCard.append(posterImage, movieTitle);
+
+    // Lägg till en klickhändelse för att visa detaljer när användaren klickar på filmkortet
+    movieCard.addEventListener('click', async () => {
+        const imdbIdProperty = movie.hasOwnProperty('imdbID') ? 'imdbID' : 'imdbid';
+        const movieDetails = await apiHandler.fetchData(`http://www.omdbapi.com/?apikey=391ecd34&i=${movie[imdbIdProperty]}&plot=full`);
+        populateModal(top20InfoContainer, movieDetails);
+        top20InfoContainer.style.display = 'block';
+    });
+
+    return movieCard;
+}
+
+// Funktion för att rensa huvudinnehållet
+function clearMainContent() {
+    const mainRef = document.querySelector('.mainContaier');
+    mainRef.innerHTML = '';
+
+    const paginationContainer = document.querySelector('.top20Container');
+    if (paginationContainer) {
+        paginationContainer.innerHTML = '';
+    }
+
+    const topHeaderContainer = document.querySelector('.top-header');
+    if (topHeaderContainer) {
+        topHeaderContainer.innerHTML = '';
+    }
+}
+
+// Funktion för att visa felmeddelanden
+function displayErrorMessage(errorMessage) {
+    console.error(`Error from API: ${errorMessage}`);
+    const errorMessageSpan = document.createElement('span');
+    errorMessageSpan.className = 'error-message';
+    errorMessageSpan.textContent = errorMessage;
+    const errorRef = document.querySelector('.errorMsg');
+    errorRef.style.display = 'block';
+    errorRef.appendChild(errorMessageSpan);
 }
